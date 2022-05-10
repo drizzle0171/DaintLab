@@ -1,6 +1,3 @@
-from sqlalchemy import false, true
-
-
 temperatures = [73, 74, 75, 71, 69, 72, 76, 73]
 def dailyTemperatures(temperatures):
         stack = []
@@ -13,4 +10,3 @@ def dailyTemperatures(temperatures):
             stack.append(i)            
         return result
 print(dailyTemperatures(temperatures))
-print([]==False)

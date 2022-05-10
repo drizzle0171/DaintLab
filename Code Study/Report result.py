@@ -20,6 +20,6 @@ def solution(id_list, report, k):
         for y in report_d[x]:
             if count_d[y] >= k:
                 answer[idx] += 1
-
+    print(count_d)
     return answer
 print(solution(id, report, k))
