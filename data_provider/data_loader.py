@@ -10,6 +10,23 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
+class Dataset_mirae_H(Dataset):
+    def __init__(self, x, y, max_x=None, min_x=None, is_train=True):
+        self.x, self.y = x, y
+        if is_train:
+            self.max_x = np.max(x)
+            self.min_x = np.min(x)
+        else:
+            self.max_x = max_x
+            self.min_x = min_x
+        self.x = (self.x - self.min_x) / (self.max_x - self.min_x)
+        self.y = (self.y - self.min_x) / (self.max_x - self.min_x)
+
+    def __len__(self):
+        return len(self.x)
+
+    def __getitem__(self, idx):
+        return torch.from_numpy(self.x[idx]).float(), torch.from_numpy(self.y[idx]).float()
 
 class Dataset_ETT_hour(Dataset):
     def __init__(self, root_path, flag='train', size=None,
@@ -101,10 +118,11 @@ class Dataset_ETT_hour(Dataset):
 
 class Dataset_ETT_minute(Dataset):
     def __init__(self, root_path, flag='train', size=None,
-                 features='S', data_path='ETTm1.csv',
+                 features='S', data_path='ETTm1_H.csv',
                  target='OT', scale=True, timeenc=0, freq='t'):
         # size [seq_len, label_len, pred_len]
         # info
+        self.flag = flag
         if size == None:
             self.seq_len = 24 * 4 * 4
             self.label_len = 24 * 4
@@ -137,6 +155,7 @@ class Dataset_ETT_minute(Dataset):
         border2s = [12 * 30 * 24 * 4, 12 * 30 * 24 * 4 + 4 * 30 * 24 * 4, 12 * 30 * 24 * 4 + 8 * 30 * 24 * 4]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
+        print(border1, border2)
 
         if self.features == 'M' or self.features == 'MS':
             cols_data = df_raw.columns[1:]
@@ -167,6 +186,7 @@ class Dataset_ETT_minute(Dataset):
 
         self.data_x = data[border1:border2]
         self.data_y = data[border1:border2]
+        print(data.shape)
         self.data_stamp = data_stamp
 
     def __getitem__(self, index):
@@ -183,6 +203,7 @@ class Dataset_ETT_minute(Dataset):
         return seq_x, seq_y, seq_x_mark, seq_y_mark
 
     def __len__(self):
+        print(len(self.data_x), self.seq_len, self.pred_len, self.flag)
         return len(self.data_x) - self.seq_len - self.pred_len + 1
 
     def inverse_transform(self, data):
@@ -284,6 +305,7 @@ class Dataset_Custom(Dataset):
         return seq_x, seq_y, seq_x_mark, seq_y_mark
 
     def __len__(self):
+        print(len(self.data_x), self.seq_len, self.pred_len)
         return len(self.data_x) - self.seq_len - self.pred_len + 1
 
     def inverse_transform(self, data):

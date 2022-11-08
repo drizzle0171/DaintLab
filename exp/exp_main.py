@@ -1,6 +1,6 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from models import Informer, Autoformer, Transformer, DLinear, Linear, NLinear
+from models import Informer, Autoformer, Transformer, DLinear, Linear, NLinear, LSTM
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, test_params_flop
 from utils.metrics import metric
 
@@ -16,6 +16,8 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 
+import random
+
 warnings.filterwarnings('ignore')
 
 class Exp_Main(Exp_Basic):
@@ -30,6 +32,7 @@ class Exp_Main(Exp_Basic):
             'DLinear': DLinear,
             'NLinear': NLinear,
             'Linear': Linear,
+            'LSTM': LSTM
         }
         model = model_dict[self.args.model].Model(self.args).float()
 
@@ -53,12 +56,12 @@ class Exp_Main(Exp_Basic):
         total_loss = []
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+            for i, (batch_x, batch_y) in enumerate(vali_loader):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float()
 
-                batch_x_mark = batch_x_mark.float().to(self.device)
-                batch_y_mark = batch_y_mark.float().to(self.device)
+                # batch_x_mark = batch_x_mark.float().to(self.device)
+                # batch_y_mark = batch_y_mark.float().to(self.device)
 
                 # decoder input
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
@@ -76,11 +79,14 @@ class Exp_Main(Exp_Basic):
                 else:
                     if 'Linear' in self.args.model:
                         outputs = self.model(batch_x)
+                    elif 'LSTM' in self.args.model:
+                        outputs = self.model.predict(batch_x, self.args.pred_len)
                     else:
                         if self.args.output_attention:
                             outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
                         else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                            # outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                            outputs = self.model(batch_x, dec_inp)
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
@@ -118,17 +124,17 @@ class Exp_Main(Exp_Basic):
         for epoch in range(self.args.train_epochs):
             iter_count = 0
             train_loss = []
-
+            
             self.model.train()
             epoch_time = time.time()
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
+            for i, (batch_x, batch_y) in enumerate(train_loader):
                 iter_count += 1
                 model_optim.zero_grad()
-                batch_x = batch_x.float().to(self.device)
 
-                batch_y = batch_y.float().to(self.device)
-                batch_x_mark = batch_x_mark.float().to(self.device)
-                batch_y_mark = batch_y_mark.float().to(self.device)
+                batch_x = batch_x.to(self.device)
+                batch_y = batch_y.to(self.device)
+                # batch_x_mark = batch_x_mark.float().to(self.device)
+                # batch_y_mark = batch_y_mark.float().to(self.device)
 
                 # decoder input
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
@@ -141,9 +147,13 @@ class Exp_Main(Exp_Basic):
                             outputs = self.model(batch_x)
                         else:
                             if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                                # outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                                # outputs = self.model(batch_x, dec_inp)[0]
+                                # outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                                outputs = self.model(batch_x, dec_inp)[0]
                             else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                                # outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                                outputs = self.model(batch_x, dec_inp)
 
                         f_dim = -1 if self.args.features == 'MS' else 0
                         outputs = outputs[:, -self.args.pred_len:, f_dim:]
@@ -156,15 +166,18 @@ class Exp_Main(Exp_Basic):
                     else:
                         if self.args.output_attention:
                             outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            
+                        elif 'LSTM' in self.args.model:
+                            outputs = self.model(batch_x, batch_y, self.args.pred_len, 0.5)
                         else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark, batch_y)
-                    # print(outputs.shape,batch_y.shape)
+                            # outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark, batch_y)
+                            outputs = self.model(batch_x, dec_inp)
                     f_dim = -1 if self.args.features == 'MS' else 0
-                    outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                    batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                    loss = criterion(outputs, batch_y)
+                    # outputs = outputs[:, -self.args.pred_len:, f_dim:]
+                    # batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
                     loss = criterion(outputs, batch_y)
                     train_loss.append(loss.item())
+
 
                 if (i + 1) % 100 == 0:
                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
@@ -178,6 +191,7 @@ class Exp_Main(Exp_Basic):
                     scaler.scale(loss).backward()
                     scaler.step(model_optim)
                     scaler.update()
+                    
                 else:
                     loss.backward()
                     model_optim.step()
@@ -187,17 +201,17 @@ class Exp_Main(Exp_Basic):
             vali_loss = self.vali(vali_data, vali_loader, criterion)
             test_loss = self.vali(test_data, test_loader, criterion)
 
-            print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
+            print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f} \n".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
-            early_stopping(vali_loss, self.model, path)
+            # early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
 
-            adjust_learning_rate(model_optim, epoch + 1, self.args)
+            # adjust_learning_rate(model_optim, epoch + 1, self.args)
 
-        best_model_path = path + '/' + 'checkpoint.pth'
-        self.model.load_state_dict(torch.load(best_model_path))
+        # best_model_path = path + '/' + 'checkpoint.pth'
+        # self.model.load_state_dict(torch.load(best_model_path))
 
         return self.model
 
@@ -217,12 +231,12 @@ class Exp_Main(Exp_Basic):
 
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+            for i, (batch_x, batch_y) in enumerate(test_loader):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
 
-                batch_x_mark = batch_x_mark.float().to(self.device)
-                batch_y_mark = batch_y_mark.float().to(self.device)
+                # batch_x_mark = batch_x_mark.float().to(self.device)
+                # batch_y_mark = batch_y_mark.float().to(self.device)
 
                 # decoder input
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
@@ -240,15 +254,17 @@ class Exp_Main(Exp_Basic):
                 else:
                     if 'Linear' in self.args.model:
                             outputs = self.model(batch_x)
+                    elif 'LSTM' in self.args.model:
+                            outputs = self.model.predict(batch_x, self.args.pred_len)
                     else:
                         if self.args.output_attention:
                             outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
 
                         else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                            # outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                            outputs = self.model(batch_x, dec_inp)
 
                 f_dim = -1 if self.args.features == 'MS' else 0
-                # print(outputs.shape,batch_y.shape)
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
                 outputs = outputs.detach().cpu().numpy()
@@ -257,9 +273,10 @@ class Exp_Main(Exp_Basic):
                 pred = outputs  # outputs.detach().cpu().numpy()  # .squeeze()
                 true = batch_y  # batch_y.detach().cpu().numpy()  # .squeeze()
 
-                preds.append(pred)
-                trues.append(true)
+                preds.append(torch.Tensor(pred))
+                trues.append(torch.Tensor(true))
                 inputx.append(batch_x.detach().cpu().numpy())
+                
                 if i % 20 == 0:
                     input = batch_x.detach().cpu().numpy()
                     gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
@@ -269,13 +286,12 @@ class Exp_Main(Exp_Basic):
         if self.args.test_flop:
             test_params_flop((batch_x.shape[1],batch_x.shape[2]))
             exit()
-        preds = np.array(preds)
-        trues = np.array(trues)
-        inputx = np.array(inputx)
 
-        preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
-        trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
-        inputx = inputx.reshape(-1, inputx.shape[-2], inputx.shape[-1])
+        preds = np.array(torch.cat(preds, dim=0))
+        trues = np.array(torch.cat(trues, dim=0))
+        # preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
+        # trues = trues.reshape(-1, trues[0].shape[-2], trues[0].shape[-1])
+        # inputx = inputx.reshape(-1, inputx[0].shape[-2], inputx[0].shape[-1])
 
         # result save
         folder_path = './results/' + setting + '/'
@@ -291,7 +307,7 @@ class Exp_Main(Exp_Basic):
         f.write('\n')
         f.close()
 
-        # np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe,rse, corr]))
+        np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe,rse, corr]))
         np.save(folder_path + 'pred.npy', preds)
         # np.save(folder_path + 'true.npy', trues)
         # np.save(folder_path + 'x.npy', inputx)

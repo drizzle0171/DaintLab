@@ -43,6 +43,7 @@ class Model(nn.Module):
                                                     configs.dropout)
             self.dec_embedding = DataEmbedding_wo_pos_temp(configs.dec_in, configs.d_model, configs.embed, configs.freq,
                                                     configs.dropout)
+
         # Encoder
         self.encoder = Encoder(
             [
@@ -79,15 +80,14 @@ class Model(nn.Module):
             projection=nn.Linear(configs.d_model, configs.c_out, bias=True)
         )
 
-    def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec,
-                enc_self_mask=None, dec_self_mask=None, dec_enc_mask=None):
+    def forward(self, x_enc, x_dec, enc_self_mask=None, dec_self_mask=None, dec_enc_mask=None):
+    # x_mark_enc, x_mark_dec 정리
 
-        enc_out = self.enc_embedding(x_enc, x_mark_enc)
+        enc_out = self.enc_embedding(x_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=enc_self_mask)
-
-        dec_out = self.dec_embedding(x_dec, x_mark_dec)
+        dec_out = self.dec_embedding(x_dec)
         dec_out = self.decoder(dec_out, enc_out, x_mask=dec_self_mask, cross_mask=dec_enc_mask)
-
+        
         if self.output_attention:
             return dec_out[:, -self.pred_len:, :], attns
         else:

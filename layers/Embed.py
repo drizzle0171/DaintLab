@@ -113,8 +113,9 @@ class DataEmbedding(nn.Module):
             d_model=d_model, embed_type=embed_type, freq=freq)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, x, x_mark):
-        x = self.value_embedding(x) + self.temporal_embedding(x_mark) + self.position_embedding(x)
+    def forward(self, x): # x_mark 추가 필요 for temporal embedding
+        # x = self.value_embedding(x) + self.temporal_embedding(x_mark) + self.position_embedding(x)
+        x = self.value_embedding(x) + self.position_embedding(x)
         return self.dropout(x)
 
 
@@ -129,8 +130,8 @@ class DataEmbedding_wo_pos(nn.Module):
             d_model=d_model, embed_type=embed_type, freq=freq)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, x, x_mark):
-        x = self.value_embedding(x) + self.temporal_embedding(x_mark)
+    def forward(self, x): # temporal embedding 삭제
+        x = self.value_embedding(x)
         return self.dropout(x)
 
 class DataEmbedding_wo_pos_temp(nn.Module):
